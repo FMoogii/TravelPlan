@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Block Blast — Tetris Fusion</title>
+  <style>
+    :root{
+      --bg:#0f1724; --panel:#0b1220; --accent:#7c3aed; --muted:#9aa4b2; --glass: rgba(255,255,255,0.04);
+      --tile-size:28px;
+    }
+    *{box-sizing:border-box;font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#061021 0%,#071022 60%,#081025 100%);color:#e6eef8}
+    .wrap{display:flex;gap:20px;align-items:flex-start;justify-content:center;padding:28px}
+    .panel{background:linear-gradient(180deg,var(--panel),#071226);border-radius:16px;padding:16px;box-shadow:0 8px 30px rgba(2,6,23,0.6);backdrop-filter: blur(6px)}
+    .left{display:flex;flex-direction:column;align-items:center;padding:12px}
+    canvas{background:linear-gradient(180deg,#061223aa,#04111aaaa);border-radius:8px;display:block}
+    .hud{display:flex;flex-direction:column;gap:12px;margin-left:8px}
+    .scorecard{min-width:200px;padding:12px;border-radius:12px;background:var(--glass);border:1px solid rgba(255,255,255,0.03)}
+    h1{margin:0;font-size:18px;letter-spacing:0.4px}
+    .sub{color:var(--muted);font-size:13px}
+    .stat{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,0.03)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    button{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.04);padding:8px 10px;border-radius:10px;color:inherit;font-weight:600}
+    .small{font-size:12px;padding:6px 8px}
+    .next-box{display:grid;grid-template-columns:repeat(4,var(--tile-size));grid-auto-rows:var(--tile-size);gap:4px;padding:8px;background:rgba(255,255,255,0.02);border-radius:8px}
+    .footer{font-size:12px;color:var(--muted);margin-top:12px}
+    .mobile-controls{display:none;margin-top:12px}
+    @media (max-width:880px){.wrap{flex-direction:column;align-items:center}.hud{flex-direction:row}.mobile-controls{display:flex;gap:6px}.scorecard{min-width:unset;width:100%}}
+    button:active{transform:translateY(1px)}
+
+    /* Keybinds modal */
+    .modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);min-width:320px;background:var(--panel);padding:14px;border-radius:12px;box-shadow:0 10px 40px rgba(2,6,23,0.7);display:none;z-index:50}
+    .modal.show{display:block}
+    .kb-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
+    .kb-btn{padding:6px 10px;border-radius:8px}
+    .muted{color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel left">
+      <h1>Block Blast — Tetris Fusion</h1>
+      <div class="sub">Falling tetrominoes + blast mechanic. Clear lines or detonate same-color clusters.</div>
+      <canvas id="game" width="280" height="560"></canvas>
+      <div class="controls">
+        <button id="playBtn">Start</button>
+        <button id="pauseBtn" class="small">Pause</button>
+        <button id="rotBtn" class="small">Rotate</button>
+        <button id="dropBtn" class="small">Drop</button>
+        <button id="keybindBtn" class="small">Keybinds</button>
+      </div>
+      <div class="mobile-controls">
+        <button id="leftBtn">?</button>
+        <button id="downBtn">?</button>
+        <button id="rightBtn">?</button>
+      </div>
+      <div class="footer">Controls: Arrow keys or WASD, ?/W rotate • Space hard drop • Click cluster to blast</div>
+    </div>
+
+    <div class="panel hud">
+      <div class="scorecard">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="sub">Score</div>
+            <div id="score" style="font-size:22px;font-weight:700">0</div>
+          </div>
+          <div>
+            <div class="sub">Level</div>
+            <div id="level" style="font-size:20px;font-weight:700">1</div>
+          </div>
+        </div>
+        <div style="height:10px"></div>
+        <div class="stat"><div class="sub">Lines</div><div id="lines">0</div></div>
+        <div class="stat"><div class="sub">Blasts</div><div id="blasts">0</div></div>
+        <div style="height:8px"></div>
+        <div class="sub">Next</div>
+        <div id="next" class="next-box" aria-hidden="true"></div>
+      </div>
+
+      <div class="scorecard">
+        <div class="sub">How it works</div>
+        <ul style="margin:8px 0 0 18px;color:var(--muted)">
+          <li>?????? ??????? ?????? ???? ???? ??? ?????? ???????? ??? ??????.</li>
+          <li>???? ?????? ??????????? ???? (click) ???????? ????????? — ???? ?????????? combo ????.</li>
+          <li>Hard drop — space. Rotate — up / Rotate button. Mobile ????? ???????? ?????.</li>
+        </ul>
+        <div style="height:8px"></div>
+        <div class="sub">Settings</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="toggleGhost" class="small">Ghost: ON</button>
+          <button id="restartBtn" class="small">Restart</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="kbModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <h3 style="margin:0 0 8px 0">Keybinds — Press a key to remap</h3>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">Saved to browser localStorage. Default supports Arrow keys and WASD.</div>
+    <div id="kbList"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+      <button id="kbClose" class="small">Close</button>
+      <button id="kbReset" class="small">Reset Defaults</button>
+    </div>
+  </div>
+
+  <script>
+  // Block Blast - Tetris Fusion (Keybinds enabled)
+  const COLS = 10; const ROWS = 20; const TILE = 28; const CANVAS_W = COLS*TILE; const CANVAS_H = ROWS*TILE;
+  const COLORS = ['#111827','#f97316','#ef4444','#4ade80','#60a5fa','#a78bfa','#fde68a','#fb7185'];
+  const SHAPES = [null, [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], [[2,0,0],[2,2,2],[0,0,0]], [[0,0,3],[3,3,3],[0,0,0]], [[4,4],[4,4]], [[0,5,5],[5,5,0],[0,0,0]], [[0,6,0],[6,6,6],[0,0,0]], [[7,7,0],[0,7,7],[0,0,0]] ];
+
+  const canvas = document.getElementById('game'); canvas.width=CANVAS_W; canvas.height=CANVAS_H; const ctx = canvas.getContext('2d');
+  let grid = createMatrix(ROWS,COLS); let current=null; let nextPiece=null; let score=0,level=1,lines=0,blasts=0; let dropInterval=800,dropTimer=0,lastTime=0; let running=false,ghost=true;
+
+  // Keybinds management using event.code strings
+  const DEFAULT_BINDINGS = {
+    left: 'ArrowLeft', right: 'ArrowRight', rotate: 'ArrowUp', down: 'ArrowDown', hardDrop: 'Space', pause: 'Escape'
+  };
+  // also accept WASD alternatives by checking both mapping and fallbacks in handler
+  let keyBindings = loadBindings();
+
+  function loadBindings(){
+    try{ const raw = localStorage.getItem('bb_keybinds'); if(raw) return JSON.parse(raw); }catch(e){}
+    localStorage.setItem('bb_keybinds', JSON.stringify(DEFAULT_BINDINGS));
+    return Object.assign({}, DEFAULT_BINDINGS);
+  }
+  function saveBindings(){ localStorage.setItem('bb_keybinds', JSON.stringify(keyBindings)); }
+
+  // UI: build keybind list
+  const kbActions = [
+    {k:'left', label:'Move Left'}, {k:'right', label:'Move Right'}, {k:'rotate', label:'Rotate'}, {k:'down', label:'Soft Drop'}, {k:'hardDrop', label:'Hard Drop'}, {k:'pause', label:'Pause/Resume'}
+  ];
+
+  function renderKbList(){
+    const list = document.getElementById('kbList'); list.innerHTML='';
+    kbActions.forEach(a=>{
+      const row = document.createElement('div'); row.className='kb-row';
+      const lbl = document.createElement('div'); lbl.textContent = a.label;
+      const btn = document.createElement('button'); btn.className='kb-btn small'; btn.textContent = keyLabel(keyBindings[a.k]||DEFAULT_BINDINGS[a.k]);
+      btn.onclick = ()=>{ listenForKey(a.k, btn); };
+      row.appendChild(lbl); row.appendChild(btn); list.appendChild(row);
+    });
+  }
+
+  function keyLabel(code){ if(!code) return '—'; if(code==='Space') return 'Space'; return code.replace('Key','').replace('Arrow','Arrow '); }
+
+  function listenForKey(action, button){
+    button.textContent = 'Press a key...';
+    function handler(e){ e.preventDefault(); const code = e.code || (e.key===' ' ? 'Space' : e.key); keyBindings[action]=code; saveBindings(); renderKbList(); window.removeEventListener('keydown', handler, true); }
+    window.addEventListener('keydown', handler, true);
+  }
+
+  document.getElementById('keybindBtn').addEventListener('click', ()=>{ document.getElementById('kbModal').classList.add('show'); document.getElementById('kbModal').setAttribute('aria-hidden','false'); renderKbList(); });
+  document.getElementById('kbClose').addEventListener('click', ()=>{ document.getElementById('kbModal').classList.remove('show'); document.getElementById('kbModal').setAttribute('aria-hidden','true'); });
+  document.getElementById('kbReset').addEventListener('click', ()=>{ keyBindings = Object.assign({}, DEFAULT_BINDINGS); saveBindings(); renderKbList(); });
+
+  // helpers
+  function createMatrix(r,c){ const m=[]; for(let i=0;i<r;i++) m.push(new Array(c).fill(0)); return m; }
+  function copyShape(s){ return s.map(row=>row.slice()); }
+  function rotate(matrix, dir){ for(let y=0;y<matrix.length;y++){ for(let x=y+1;x<matrix[y].length;x++){ [matrix[y][x], matrix[x][y]] = [matrix[x][y], matrix[y][x]]; } } if(dir>0) matrix.forEach(row=>row.reverse()); else matrix.reverse(); return matrix; }
+  function randInt(max){ return Math.floor(Math.random()*max); }
+  function newPiece(){ const id = randInt(SHAPES.length-1)+1; const shape = copyShape(SHAPES[id]); return {shape, id, x: Math.floor((COLS-shape[0].length)/2), y: -shape.length, color:id}; }
+  function collide(mat,p){ for(let r=0;r<p.shape.length;r++){ for(let c=0;c<p.shape[r].length;c++){ if(p.shape[r][c]){ let gy=p.y+r, gx=p.x+c; if(gy<0) continue; if(gy>=ROWS||gx<0||gx>=COLS) return true; if(mat[gy][gx]) return true; } } } return false; }
+  function merge(mat,p){ for(let r=0;r<p.shape.length;r++){ for(let c=0;c<p.shape[r].length;c++){ if(p.shape[r][c]){ let gy=p.y+r,gx=p.x+c; if(gy>=0 && gy<ROWS && gx>=0 && gx<COLS) mat[gy][gx]=p.color; } } } }
+
+  function clearLines(){ let cleared=0; outer: for(let r=ROWS-1;r>=0;r--){ for(let c=0;c<COLS;c++) if(!grid[r][c]) continue outer; grid.splice(r,1); grid.unshift(new Array(COLS).fill(0)); cleared++; r++; } if(cleared>0){ lines+=cleared; score += (cleared*cleared)*100; level = Math.min(20, Math.floor(lines/10)+1); dropInterval = Math.max(120, 800 - (level-1)*40); updateHUD(); } }
+  function updateHUD(){ document.getElementById('score').textContent=score; document.getElementById('level').textContent=level; document.getElementById('lines').textContent=lines; document.getElementById('blasts').textContent=blasts; }
+
+  function findCluster(sr,sc){ const color = grid[sr][sc]; if(!color) return []; const visited = Array.from({length:ROWS}, ()=>new Array(COLS).fill(false)); const stack=[[sr,sc]]; visited[sr][sc]=true; const out=[]; while(stack.length){ const [r,c]=stack.pop(); out.push([r,c]); const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; for(const [dr,dc] of dirs){ const nr=r+dr,nc=c+dc; if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&!visited[nr][nc]&&grid[nr][nc]===color){ visited[nr][nc]=true; stack.push([nr,nc]); } } } return out; }
+  function blastCluster(cells){ if(cells.length<3) return 0; for(const [r,c] of cells) grid[r][c]=0; for(let c=0;c<COLS;c++){ let col=[]; for(let r=ROWS-1;r>=0;r--) if(grid[r][c]) col.push(grid[r][c]); for(let r=ROWS-1;r>=0;r--){ grid[r][c] = col.shift()||0; } } const gained = cells.length*20 + (cells.length>6?100:0); score += gained; blasts++; updateHUD(); return gained; }
+
+  function showGameOver(){ setTimeout(()=>{ alert('Game Over — Score: '+score); },10); }
+
+  // Drawing
+  function draw(){ ctx.clearRect(0,0,CANVAS_W,CANVAS_H); ctx.fillStyle='#071426'; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+    for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const val=grid[r][c]; if(val) drawTile(c,r,val); } }
+    if(ghost && current){ const gy = calcGhostY(); drawPiece(current, gy, true); }
+    if(current) drawPiece(current, current.y, false);
+    ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=2; ctx.strokeRect(0,0,CANVAS_W,CANVAS_H);
+  }
+  function drawPiece(p,y,isGhost){ for(let r=0;r<p.shape.length;r++){ for(let c=0;c<p.shape[r].length;c++){ if(p.shape[r][c]){ const x=p.x+c; const yy=y+r; if(yy<0) continue; drawTile(x,yy,p.color,isGhost); } } } }
+  function drawTile(col,row,colorIndex,ghost){ const x=col*TILE,y=row*TILE; const color=COLORS[colorIndex]||'#999'; ctx.save(); if(ghost){ ctx.globalAlpha=0.28; ctx.fillStyle=color; } else { ctx.globalAlpha=1; ctx.fillStyle=color; } const pad=2,w=TILE-pad*2,h=TILE-pad*2,rx=6; roundRect(ctx,x+pad,y+pad,w,h,rx,true,false); ctx.globalAlpha = ghost?0.06:0.18; ctx.fillStyle='#ffffff'; roundRect(ctx,x+pad,y+pad,w,h/2,rx,true,false); ctx.restore(); }
+  function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(typeof r==='undefined') r=5; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke(); }
+  function calcGhostY(){ const p={shape:current.shape,x:current.x,y:current.y}; while(!collide(grid,p)) p.y++; return p.y-1; }
+
+  // Loop
+  function update(time=0){ const dt = time - lastTime; lastTime = time; if(!running) return draw(); dropTimer += dt; if(dropTimer>dropInterval){ drop(); dropTimer=0; } draw(); requestAnimationFrame(update); }
+  function drop(){ current.y++; if(collide(grid,current)){ current.y--; merge(grid,current); clearLines(); spawn(); } }
+  function move(dx){ current.x += dx; if(collide(grid,current)) current.x -= dx; }
+  function rotatePiece(dir){ const shape = copyShape(current.shape); rotate(shape,dir); const oldX = current.x; let kicked=false; for(let k=0;k<5;k++){ current.shape = shape; if(!collide(grid,current)){ kicked=true; break; } current.x += (k%2===0?1:-1)*Math.ceil(k/2); } if(!kicked){ current.shape = copyShape(SHAPES[current.id]); current.x = oldX; } }
+  function hardDrop(){ while(!collide(grid,current)) current.y++; current.y--; merge(grid,current); clearLines(); spawn(); dropTimer=0; }
+
+  // Input handling using keyBindings (by code)
+  function handleKeyDown(e){ if(document.getElementById('kbModal').classList.contains('show')) return; if(!running && e.code !== (keyBindings.pause||DEFAULT_BINDINGS.pause)) return; const code = e.code; // primary match
+    // Important: support common WASD keycodes as alternative
+    const alt = {
+      ArrowLeft: ['KeyA'], ArrowRight: ['KeyD'], ArrowUp: ['KeyW'], ArrowDown: ['KeyS'], Space: ['Space']
+    };
+    function isMatch(action){ const bound = keyBindings[action] || DEFAULT_BINDINGS[action]; if(!bound) return false; if(bound===code) return true; // exact match
+      // fallbacks: if bound is ArrowLeft but user presses KeyA, allow
+      if(alt[bound] && alt[bound].includes(code)) return true; return false; }
+
+    if(isMatch('left')){ move(-1); }
+    else if(isMatch('right')){ move(1); }
+    else if(isMatch('rotate')){ rotatePiece(1); }
+    else if(isMatch('down')){ current.y++; if(collide(grid,current)) current.y--; }
+    else if(isMatch('hardDrop')){ hardDrop(); }
+    else if(isMatch('pause')){ running=!running; if(running) { lastTime = performance.now(); requestAnimationFrame(update);} }
+    draw();
+  }
+  window.addEventListener('keydown', handleKeyDown);
+
+  // Click to blast
+  canvas.addEventListener('click', e=>{ const rect=canvas.getBoundingClientRect(); const cx=e.clientX-rect.left, cy=e.clientY-rect.top; const col=Math.floor(cx/TILE), row=Math.floor(cy/TILE); if(row<0||row>=ROWS||col<0||col>=COLS) return; if(grid[row][col]===0) return; const cluster = findCluster(row,col); const gained = blastCluster(cluster); if(gained){ score += Math.floor(gained*0.1); updateHUD(); clearLines(); draw(); } });
+
+  // UI buttons
+  document.getElementById('playBtn').addEventListener('click', ()=>{ if(!running){ startGame(); document.getElementById('playBtn').textContent='Resume'; } });
+  document.getElementById('pauseBtn').addEventListener('click', ()=>{ running=!running; if(running) requestAnimationFrame(update); });
+  document.getElementById('rotBtn').addEventListener('click', ()=>{ if(current){ rotatePiece(1); draw(); } });
+  document.getElementById('dropBtn').addEventListener('click', ()=>{ if(current){ hardDrop(); draw(); } });
+  document.getElementById('restartBtn').addEventListener('click', ()=>{ reset(); startGame(); });
+  document.getElementById('toggleGhost').addEventListener('click', e=>{ ghost=!ghost; e.target.textContent = 'Ghost: '+(ghost?'ON':'OFF'); draw(); });
+
+  document.getElementById('leftBtn').addEventListener('click', ()=>{ if(running) move(-1); draw(); });
+  document.getElementById('rightBtn').addEventListener('click', ()=>{ if(running) move(1); draw(); });
+  document.getElementById('downBtn').addEventListener('click', ()=>{ if(running){ current.y++; if(collide(grid,current)) current.y--; } draw(); });
+
+  function updateNextUI(){ const nextBox = document.getElementById('next'); nextBox.innerHTML=''; const size=4; const frag=document.createDocumentFragment(); for(let r=0;r<size;r++){ for(let c=0;c<size;c++){ const cell=document.createElement('div'); cell.style.width = TILE/2+'px'; cell.style.height = TILE/2+'px'; cell.style.borderRadius='4px'; cell.style.background='transparent'; frag.appendChild(cell); } } nextBox.appendChild(frag); const boxes = nextBox.children; const s = nextPiece.shape; const offset = Math.floor((size - s.length)/2); for(let r=0;r<s.length;r++){ for(let c=0;c<s[r].length;c++){ if(s[r][c]){ const idx = (r+offset)*size + (c+offset); if(boxes[idx]) boxes[idx].style.background = COLORS[nextPiece.color]; } } } }
+
+  function reset(){ grid = createMatrix(ROWS,COLS); score=0;level=1;lines=0;blasts=0;dropInterval=800;dropTimer=0; document.getElementById('score').textContent=0;document.getElementById('level').textContent=1;document.getElementById('lines').textContent=0;document.getElementById('blasts').textContent=0; nextPiece = newPiece(); current = null; updateNextUI(); draw(); }
+  function startGame(){ if(!running){ running=true; if(!current) spawn(); lastTime=performance.now(); requestAnimationFrame(update); } }
+  function spawn(){ current = nextPiece || newPiece(); nextPiece = newPiece(); if(collide(grid,current)){ running=false; showGameOver(); } updateNextUI(); }
+
+  // small polish
+  canvas.addEventListener('mousedown', e=>e.preventDefault()); window.__bb = {grid,reset,spawn,hardDrop,keyBindings};
+
+  // init
+  reset(); renderKbList();
+  </script>
+</body>
+</html>
